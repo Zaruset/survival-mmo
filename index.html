@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Survival MMO - Day R стиль</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            background: linear-gradient(135deg, #1a472a 0%, #0a1f0a 100%);
+            font-family: 'Courier New', monospace;
+            color: #d4d4d4;
+            padding: 12px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        /* Статус-панель */
+        .status-bar {
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 20px;
+            padding: 12px;
+            margin-bottom: 12px;
+            border: 1px solid #4a6a4a;
+        }
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+            text-align: center;
+            font-size: 11px;
+        }
+        .status-value {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .status-value.low { color: #ff6b6b; }
+
+        /* Игроки рядом */
+        .nearby-players {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 15px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+        .player-card {
+            background: #2a3a2a;
+            border-radius: 12px;
+            padding: 8px;
+            margin: 5px;
+            display: inline-block;
+            width: calc(33% - 10px);
+            text-align: center;
+            font-size: 11px;
+            cursor: pointer;
+        }
+        .player-card.online { border: 1px solid #6bcb77; }
+        .player-card.offline { opacity: 0.5; }
+
+        /* Локации */
+        .locations {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin: 12px 0;
+        }
+        .location-card {
+            background: rgba(30, 40, 30, 0.9);
+            border-radius: 20px;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            border: 1px solid #4a6a4a;
+        }
+        .location-emoji { font-size: 35px; }
+
+        /* Чат рядом */
+        .chat-area {
+            background: rgba(0, 0, 0, 0.6);
+            border-radius: 15px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .chat-message {
+            font-size: 11px;
+            margin: 5px 0;
+            border-bottom: 1px solid #3a5a3a;
+        }
+        .chat-input {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+        .chat-input input {
+            flex: 1;
+            padding: 8px;
+            border-radius: 20px;
+            border: none;
+            background: #2a3a2a;
+            color: white;
+        }
+        .chat-input button {
+            background: #4a6a4a;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 5px;
+            margin: 12px 0;
+        }
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            background: #2a3a2a;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .tab.active {
+            background: #6bcb77;
+            color: #1a2a1a;
+        }
+
+        .admin-panel {
+            background: #2a2a2a;
+            border-radius: 15px;
+            padding: 12px;
+            margin-top: 15px;
+            border: 1px solid gold;
+        }
+        button {
+            background: #4a6a4a;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 12px;
+            margin: 3px;
+        }
+        .footer {
+            text-align: center;
+            font-size: 9px;
+            margin: 15px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <!-- Статус -->
+    <div class="status-bar">
+        <div class="status-grid">
+            <div><div class="status-value" id="health">100</div><div>❤️</div></div>
+            <div><div class="status-value" id="hunger">100</div><div>🍖</div></div>
+            <div><div class="status-value" id="thirst">100</div><div>💧</div></div>
+            <div><div class="status-value" id="day">1</div><div>📅</div></div>
+        </div>
+        <div class="status-grid">
+            <div><div id="locationName">🌲 Лес</div></div>
+            <div><div id="nearbyCount">0</div><div>👥 рядом</div></div>
+        </div>
+    </div>
+
+    <!-- Игроки рядом -->
+    <div class="nearby-players" id="nearbyPlayersList">
+        👥 Поиск выживших...
+    </div>
+
+    <!-- Вкладки -->
+    <div class="tabs">
+        <div class="tab active" onclick="switchTab('locations')">🗺️ ЛОКАЦИИ</div>
+        <div class="tab" onclick="switchTab('craft')">🔨 КРАФТ</div>
+        <div class="tab" onclick="switchTab('chat')">💬 ЧАТ РЯДОМ</div>
+        <div class="tab" onclick="switchTab('profile')">👤 ПРОФИЛЬ</div>
+    </div>
+
+    <!-- Локации -->
+    <div id="tabLocations">
+        <div class="locations" id="locationsGrid"></div>
+        <div id="exploreMsg" style="font-size:12px; text-align:center; margin-top:8px;"></div>
+    </div>
+
+    <!-- Крафт -->
+    <div id="tabCraft" style="display:none" id="craftList"></div>
+
+    <!-- Чат -->
+    <div id="tabChat" style="display:none">
+        <div class="chat-area" id="chatMessages">
+            <div class="chat-message">💬 Чат локации</div>
+        </div>
+        <div class="chat-input">
+            <input type="text" id="chatInput" placeholder="Сказать выжившим рядом...">
+            <button onclick="sendChatMessage()">📢</button>
+        </div>
+    </div>
+
+    <!-- Профиль -->
+    <div id="tabProfile" style="display:none">
+        <div class="status-bar">🏆 Убито мутантов: <span id="kills">0</span></div>
+        <div class="status-bar">💀 Смертей: <span id="deaths">0</span></div>
+        <div class="status-bar">⚔️ PvP побед: <span id="pvpWins">0</span></div>
+        <div class="status-bar">🔧 Уровень базы: <span id="baseLevel">1</span></div>
+    </div>
+
+    <!-- Админка -->
+    <div id="adminBlock" style="display:none" class="admin-panel">
+        <h4>👑 АДМИН</h4>
+        <input type="text" id="adminId" placeholder="ID игрока" style="width:100%; margin:5px 0; padding:6px;">
+        <button onclick="adminHeal()">💊 Вылечить</button>
+        <button onclick="adminTeleport()">📍 Телепорт</button>
+        <button onclick="adminReset()">🗑️ Сброс</button>
+    </div>
+
+    <div class="footer">📢 Канал: https://t.me/fjskaw2 | MMO выживание</div>
+</div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+    
+    let myId = tg.initDataUnsafe.user?.id || Math.floor(Math.random()*1000000);
+    let myName = tg.initDataUnsafe.user?.first_name || "Выживший";
+    
+    // Данные игрока
+    let player = {
+        id: myId,
+        name: myName,
+        health: 100, hunger: 100, thirst: 100,
+        day: 1, location: "forest", kills: 0, deaths: 0, pvpWins: 0, baseLevel: 1,
+        inventory: { еда: 3, вода: 3, аптечка: 1, бинты: 2, патроны: 0, оружие: "Нож" }
+    };
+    
+    // Локации
+    const locations = {
+        forest: { name: "🌲 Лес", emoji: "🌲", items: ["еда","трава"], danger: 20 },
+        city: { name: "🏙️ Руины", emoji: "🏚️", items: ["консервы","аптечка"], danger: 50 },
+        bunker: { name: "🚪 Бункер", emoji: "🚪", items: ["патроны","аптечка"], danger: 70 },
+        lake: { name: "💧 Озеро", emoji: "💧", items: ["вода","рыба"], danger: 15 }
+    };
+    
+    // Список игроков онлайн (будет обновляться с сервера)
+    let nearbyPlayers = [];
+    let chatMessages = [];
+    
+    // Обновление UI
+    function updateUI() {
+        document.getElementById('health').innerText = Math.max(0, player.health);
+        document.getElementById('hunger').innerText = player.hunger;
+        document.getElementById('thirst').innerText = player.thirst;
+        document.getElementById('day').innerText = player.day;
+        document.getElementById('locationName').innerHTML = locations[player.location]?.name || "🌲 Лес";
+        document.getElementById('kills').innerText = player.kills;
+        document.getElementById('deaths').innerText = player.deaths;
+        document.getElementById('pvpWins').innerText = player.pvpWins;
+        document.getElementById('baseLevel').innerText = player.baseLevel;
+        
+        // Обновляем список игроков рядом
+        let nearbyDiv = document.getElementById('nearbyPlayersList');
+        let nearbyHere = nearbyPlayers.filter(p => p.location === player.location && p.id !== player.id);
+        document.getElementById('nearbyCount').innerText = nearbyHere.length;
+        
+        if(nearbyHere.length === 0) {
+            nearbyDiv.innerHTML = "👥 Никого рядом...";
+        } else {
+            nearbyDiv.innerHTML = nearbyHere.map(p => 
+                `<div class="player-card online" onclick="interactWithPlayer('${p.id}')">
+                    ${p.name}<br>❤️ ${p.health}
+                 </div>`
+            ).join('');
+        }
+        
+        renderLocations();
+        renderCraft();
+        updateChatDisplay();
+        saveToBot();
+    }
+    
+    function renderLocations(){
+        let grid = document.getElementById('locationsGrid');
+        grid.innerHTML = '';
+        for(let [id, loc] of Object.entries(locations)){
+            let card = document.createElement('div');
+            card.className = 'location-card';
+            card.innerHTML = `<div class="location-emoji">${loc.emoji}</div>
+                              <div class="location-name">${loc.name}</div>
+                              <div style="font-size:10px;">⚠️ ${loc.danger}%</div>`;
+            card.onclick = () => moveToLocation(id);
+            grid.appendChild(card);
+        }
+    }
+    
+    function moveToLocation(locId){
+        player.location = locId;
+        player.day++;
+        // Шанс найти предмет
+        let loc = locations[locId];
+        if(Math.random() * 100 < (100 - loc.danger)){
+            let found = loc.items[Math.floor(Math.random()*loc.items.length)];
+            player.inventory[found] = (player.inventory[found]||0) + 1;
+            document.getElementById('exploreMsg').innerHTML = `✅ Найден: ${found}`;
+        } else {
+            let dmg = Math.floor(Math.random()*15)+5;
+            player.health -= dmg;
+            document.getElementById('exploreMsg').innerHTML = `⚠️ Травма! -${dmg} здоровья`;
+        }
+        // Голод и жажда
+        player.hunger = Math.max(0, player.hunger - 4);
+        player.thirst = Math.max(0, player.thirst - 5);
+        updateUI();
+        // Сообщаем серверу о смене локации
+        sendPlayerUpdate();
+    }
+    
+    function interactWithPlayer(targetId){
+        let target = nearbyPlayers.find(p => p.id == targetId);
+        if(!target) return;
+        let action = confirm(`👤 ${target.name}\n❤️ Здоровье: ${target.health}\n\nЧто сделать?\n«ОК» - атаковать\n«Отмена» - отмена`);
+        if(action){
+            startPvP(target);
+        }
+    }
+    
+    function startPvP(enemy){
+        let myPower = 10 + (player.inventory.оружие?.includes("Пистолет")?20:5);
+        let enemyPower = 10;
+        let myDmg = Math.floor(Math.random()*myPower)+8;
+        let enemyDmg = Math.floor(Math.random()*enemyPower)+5;
+        
+        if(myDmg > enemyDmg){
+            player.pvpWins++;
+            player.health -= enemyDmg/2;
+            tg.sendData(JSON.stringify({type:'pvp_result', winner:player.id, loser:enemy.id}));
+            document.getElementById('exploreMsg').innerHTML = `⚔️ ПОБЕДА над ${enemy.name}!`;
+        } else {
+            player.health -= enemyDmg;
+            player.deaths++;
+            document.getElementById('exploreMsg').innerHTML = `💀 Поражение от ${enemy.name}...`;
+        }
+        updateUI();
+    }
+    
+    function renderCraft(){
+        let div = document.getElementById('tabCraft');
+        if(!div) return;
+        let crafts = [
+            {name:"🍞 Еда", need:{еда:1}, give:"еда", amount:2},
+            {name:"💧 Вода", need:{вода:1}, give:"вода", amount:2},
+            {name:"🩸 Аптечка", need:{бинты:2}, give:"аптечка", amount:1}
+        ];
+        div.innerHTML = '<div style="text-align:center; margin-bottom:8px;">🔨 КРАФТ</div>';
+        for(let c of crafts){
+            let can = true;
+            for(let [res,count] of Object.entries(c.need)){
+                if((player.inventory[res]||0) < count) can=false;
+            }
+            div.innerHTML += `<div class="status-bar" style="display:flex; justify-content:space-between;">
+                                <span>${c.name}</span>
+                                <button onclick="doCraft('${c.name}')" ${!can?'disabled':''}>Создать</button>
+                              </div>`;
+        }
+    }
+    
+    function doCraft(name){
+        if(name=="🍞 Еда" && player.inventory.еда>=1){
+            player.inventory.еда-=1;
+            player.inventory.еда += 2;
+        } else if(name=="💧 Вода" && player.inventory.вода>=1){
+            player.inventory.вода-=1;
+            player.inventory.вода += 2;
+        } else if(name=="🩸 Аптечка" && player.inventory.бинты>=2){
+            player.inventory.бинты-=2;
+            player.inventory.аптечка = (player.inventory.аптечка||0)+1;
+        } else { tg.showAlert("❌ Не хватает ресурсов"); return; }
+        updateUI();
+    }
+    
+    function sendChatMessage(){
+        let msg = document.getElementById('chatInput').value;
+        if(!msg.trim()) return;
+        let chatData = { type:'chat', location:player.location, from:player.name, message:msg, time:Date.now() };
+        tg.sendData(JSON.stringify(chatData));
+        document.getElementById('chatInput').value = '';
+        addChatMessage("Вы", msg);
+    }
+    
+    function addChatMessage(sender, msg){
+        chatMessages.unshift({sender, msg, time:new Date().toLocaleTimeString()});
+        if(chatMessages.length > 30) chatMessages.pop();
+        updateChatDisplay();
+    }
+    
+    function updateChatDisplay(){
+        let chatDiv = document.getElementById('chatMessages');
+        if(!chatDiv) return;
+        let localMsgs = chatMessages.filter(m => true);
+        chatDiv.innerHTML = '<div class="chat-message">💬 Чат локации</div>' + 
+            localMsgs.slice(0,20).map(m => `<div class="chat-message">${m.sender}: ${m.msg}</div>`).join('');
+    }
+    
+    function sendPlayerUpdate(){
+        let update = {
+            type: 'player_update',
+            id: player.id,
+            name: player.name,
+            health: player.health,
+            location: player.location
+        };
+        tg.sendData(JSON.stringify(update));
+    }
+    
+    function switchTab(tab){
+        document.getElementById('tabLocations').style.display='none';
+        document.getElementById('tabCraft').style.display='none';
+        document.getElementById('tabChat').style.display='none';
+        document.getElementById('tabProfile').style.display='none';
+        if(tab==='locations') document.getElementById('tabLocations').style.display='block';
+        if(tab==='craft') document.getElementById('tabCraft').style.display='block';
+        if(tab==='chat') document.getElementById('tabChat').style.display='block';
+        if(tab==='profile') document.getElementById('tabProfile').style.display='block';
+        document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+        if(event?.target) event.target.classList.add('active');
+        renderCraft();
+    }
+    
+    function saveToBot(){
+        let data = { health:player.health, hunger:player.hunger, thirst:player.thirst,
+                     day:player.day, kills:player.kills, deaths:player.deaths, pvpWins:player.pvpWins,
+                     inventory:player.inventory, location:player.location };
+        tg.sendData(JSON.stringify({type:'save', data}));
+    }
+    
+    // Админ
+    function adminHeal(){
+        let target = document.getElementById('adminId').value;
+        tg.sendData(JSON.stringify({type:'admin_heal', userId:target}));
+    }
+    function adminTeleport(){
+        let target = document.getElementById('adminId').value;
+        tg.sendData(JSON.stringify({type:'admin_teleport', userId:target}));
+    }
+    function adminReset(){
+        let target = document.getElementById('adminId').value;
+        tg.sendData(JSON.stringify({type:'admin_reset', userId:target}));
+    }
+    
+    // Периодические обновления
+    setInterval(()=>{
+        player.hunger = Math.max(0, player.hunger-1);
+        player.thirst = Math.max(0, player.thirst-1);
+        updateUI();
+        sendPlayerUpdate();
+    }, 30000);
+    
+    // Обработка входящих данных от бота
+    tg.onEvent('viewportChanged', ()=>tg.expand());
+    
+    // Симуляция получения данных о других игроках (бот будет присылать)
+    window.updateNearbyPlayers = function(players){
+        nearbyPlayers = players;
+        updateUI();
+    };
+    
+    window.addChatFromServer = function(sender, msg){
+        addChatMessage(sender, msg);
+    };
+    
+    updateUI();
+    sendPlayerUpdate();
+    setInterval(()=>sendPlayerUpdate(), 45000);
+</script>
+</body>
+</html>
